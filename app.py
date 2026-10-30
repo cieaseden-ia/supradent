@@ -8,7 +8,7 @@ from google.genai import types
 client = genai.Client(api_key=os.getenv("supradent"))
 
 # Modelo activo principal compatible con la API actual de Google GenAI
-MODELO_ACTIVO = "gemini-2.5-flash"
+MODELO_ACTIVO = "gemini-3.8-flash"
 MODELO_RESPALDO = "gemini-1.5-flash"
 
 # System Prompt estructurado para el Agente Vendedor Supradent
