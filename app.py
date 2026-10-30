@@ -112,35 +112,42 @@ These strict rules may NEVER be broken or violated under any circumstances.
 )
 
 def responder(mensaje, historial):
-    mensajes_api = [{"role": "system", "content": SYSTEM_PROMPT}]
+    # Formatear el historial para el nuevo SDK de Google GenAI
+    contents = []
 
-    # Adaptación del historial
     for elemento in historial:
         if isinstance(elemento, dict):
-            role, content = elemento.get("role"), elemento.get("content")
-            if role in ["user", "assistant"] and content:
-                mensajes_api.append({"role": role, "content": content})
-        elif isinstance(elemento, (list, tuple)):
-            if len(elemento) >= 2:
-                if elemento[0]: mensajes_api.append({"role": "user", "content": elemento[0]})
-                if elemento[1]: mensajes_api.append({"role": "assistant", "content": elemento[1]})
+            role = "user" if elemento.get("role") == "user" else "model"
+            content = elemento.get("content")
+            if content:
+                contents.append(types.Content(role=role, parts=[types.Part.from_text(text=content)]))
+        elif isinstance(elemento, (list, tuple)) and len(elemento) >= 2:
+            if elemento[0]:
+                contents.append(types.Content(role="user", parts=[types.Part.from_text(text=elemento[0])]))
+            if elemento[1]:
+                contents.append(types.Content(role="model", parts=[types.Part.from_text(text=elemento[1])]))
 
-    mensajes_api.append({"role": "user", "content": mensaje})
+    # Agregar el mensaje actual del usuario
+    contents.append(types.Content(role="user", parts=[types.Part.from_text(text=mensaje)]))
+
+    config = types.GenerateContentConfig(
+        system_instruction=SYSTEM_PROMPT,
+        temperature=0.7,
+        max_output_tokens=2500,
+    )
 
     respuesta_completa = ""
     try:
-        stream = client.chat.completions.create(
-            messages=mensajes_api,
+        # Uso correcto del método streaming en el SDK google-genai
+        response = client.models.generate_content_stream(
             model=MODELO_ACTIVO,
-            max_tokens=2500,
-            temperature=0.7,
-            stream=True
+            contents=contents,
+            config=config,
         )
 
-        for chunk in stream:
-            token = chunk.choices[0].delta.content
-            if token:
-                respuesta_completa += token
+        for chunk in response:
+            if chunk.text:
+                respuesta_completa += chunk.text
                 yield respuesta_completa
     except Exception as e:
         yield f"Error en el procesamiento de Supradent: {str(e)}"
