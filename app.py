@@ -7,8 +7,8 @@ from google.genai import types
 # Inicialización del cliente oficial de Google GenAI usando la clave de entorno supradent
 client = genai.Client(api_key=os.getenv("supradent"))
 
-# Modelo activo principal y de respaldo correctos para el SDK de Google GenAI
-MODELO_ACTIVO = "gemini-2.5-flash"
+# CORRECCIÓN: Actualizado al modelo activo compatible con la API actual
+MODELO_ACTIVO = "gemini-3.8-flash"
 MODELO_RESPALDO = "gemini-1.5-flash"
 
 # System Prompt estructurado para el Agente Vendedor Supradent
@@ -112,42 +112,34 @@ These strict rules may NEVER be broken or violated under any circumstances.
 )
 
 def responder(mensaje, historial):
-    # Formatear el historial para el nuevo SDK de Google GenAI
-    contents = []
+    mensajes_api = [{"role": "system", "content": SYSTEM_PROMPT}]
 
     for elemento in historial:
         if isinstance(elemento, dict):
-            role = "user" if elemento.get("role") == "user" else "model"
-            content = elemento.get("content")
-            if content:
-                contents.append(types.Content(role=role, parts=[types.Part.from_text(text=content)]))
-        elif isinstance(elemento, (list, tuple)) and len(elemento) >= 2:
-            if elemento[0]:
-                contents.append(types.Content(role="user", parts=[types.Part.from_text(text=elemento[0])]))
-            if elemento[1]:
-                contents.append(types.Content(role="model", parts=[types.Part.from_text(text=elemento[1])]))
+            role, content = elemento.get("role"), elemento.get("content")
+            if role in ["user", "assistant"] and content:
+                mensajes_api.append({"role": role, "content": content})
+        elif isinstance(elemento, (list, tuple)):
+            if len(elemento) >= 2:
+                if elemento[0]: mensajes_api.append({"role": "user", "content": elemento[0]})
+                if elemento[1]: mensajes_api.append({"role": "assistant", "content": elemento[1]})
 
-    # Agregar el mensaje actual del usuario
-    contents.append(types.Content(role="user", parts=[types.Part.from_text(text=mensaje)]))
-
-    config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT,
-        temperature=0.7,
-        max_output_tokens=2500,
-    )
+    mensajes_api.append({"role": "user", "content": mensaje})
 
     respuesta_completa = ""
     try:
-        # Uso correcto del método streaming en el SDK google-genai
-        response = client.models.generate_content_stream(
+        stream = client.chat.completions.create(
+            messages=mensajes_api,
             model=MODELO_ACTIVO,
-            contents=contents,
-            config=config,
+            max_tokens=2500,
+            temperature=0.7,
+            stream=True
         )
 
-        for chunk in response:
-            if chunk.text:
-                respuesta_completa += chunk.text
+        for chunk in stream:
+            token = chunk.choices[0].delta.content
+            if token:
+                respuesta_completa += token
                 yield respuesta_completa
     except Exception as e:
         yield f"Error en el procesamiento de Supradent: {str(e)}"
@@ -167,3 +159,4 @@ demo = gr.ChatInterface(
 
 if __name__ == "__main__":
     demo.launch(server_name="0.0.0.0", server_port=10000, inline=False)
+    
